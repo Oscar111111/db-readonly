@@ -1,0 +1,66 @@
+# dm-db-readonly 本地配置模板。
+#
+# 使用方式：复制为 config.local.yaml，然后只修改 config.local.yaml。
+# 不要把数据库密码直接写进配置文件，请使用 passwordEnv 指向环境变量。
+
+datasources:
+  # 数据源名称。调用 MCP 工具时 datasource 参数填写这个值。
+  # 建议名称包含环境、主机和 schema，避免不同环境同名 schema 冲突。
+  dm-dev:
+    # 项目名称，用于多项目共存时区分来源。
+    project: "your-project"
+
+    # 环境名称，建议使用 dev / test / prod。
+    env: "test"
+
+    # 数据源描述。datasource_list 会返回这个描述，帮助大模型判断要查哪个环境。
+    description: "Development Dameng database"
+
+    # Windows 已安装的 ODBC 驱动名称。
+    # 不确定名称时，执行 .\setup.ps1 -Drivers 查看本机可用 ODBC 驱动列表。
+    # 达梦常见名称示例："DM8 ODBC DRIVER"。
+    driver: "DM8 ODBC DRIVER"
+
+    # 达梦数据库主机地址和端口。
+    host: "127.0.0.1"
+    port: 5236
+
+    # 这个数据源允许查询的 schema。
+    # SQL 必须显式带上这个 schema，例如 YOUR_SCHEMA.YOUR_TABLE。
+    schema: "YOUR_SCHEMA"
+
+    # 只读数据库账号。
+    username: "READONLY_USER"
+
+    # 保存密码的环境变量名称。
+    # 示例：
+    # [Environment]::SetEnvironmentVariable("DM_READONLY_PASSWORD", "your_password", "User")
+    passwordEnv: "DM_READONLY_PASSWORD"
+
+    # 单次查询最多返回的行数。仅用于服务端截断，不会暴露给大模型。
+    maxRows: 100
+
+    # 查询超时时间，单位秒。
+    queryTimeoutSeconds: 10
+
+    # 允许查询的表名模式列表，支持 "*" 通配符。
+    # "*" 表示允许查询当前 schema 下所有表。
+    # allowTables 和 denyTables 类型一致，都是表名模式列表。
+    allowTables: ["*"]
+
+    # 禁止查询的表名模式列表，支持 "*" 通配符。
+    # denyTables 优先级高于 allowTables。
+    # 第一版可以先留空。后续可按需增加，例如：
+    # - "SYS_*"
+    # - "*_LOG"
+    # - "*_SECRET"
+    denyTables: []
+
+# entityType 到表名的例外映射。
+# 默认推导规则：
+#   Inventory -> MOM_INVENTORY
+#   InventoryBatchAttribute -> MOM_INVENTORY_BATCH_ATTRIBUTE
+# 只有当某个 entityType 不符合默认规则时，才需要在这里配置。
+# 示例：
+#   SomeSpecialEntity: MOM_CUSTOM_TABLE
+entityOverrides: {}

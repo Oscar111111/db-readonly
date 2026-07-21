@@ -13,7 +13,7 @@ class SqlGuardError(ValueError):
 
 
 def ensure_table_allowed(table: str, datasource: DataSourceConfig) -> str:
-    table_name = validate_table_name(table)
+    table_name = validate_table_name(table, datasource.db_type)
     allow_rules = datasource.allow_tables or ["*"]
     deny_rules = datasource.deny_tables or []
 
@@ -43,9 +43,10 @@ def ensure_safe_select(sql: str, datasource: DataSourceConfig) -> str:
     if ";" in normalized:
         raise SqlGuardError("SQL 中不能包含分号")
 
-    schema = re.escape(datasource.schema.upper())
-    if not re.search(rf"\b{schema}\.", upper_sql):
+    if not _contains_schema_reference(normalized, datasource):
         raise SqlGuardError(f"查询必须显式限定 schema：{datasource.schema}")
+    if _contains_other_schema_table_reference(normalized, datasource):
+        raise SqlGuardError(f"禁止查询其他 schema：{datasource.schema}")
 
     forbidden_keywords = [
         "INSERT",
@@ -58,25 +59,33 @@ def ensure_safe_select(sql: str, datasource: DataSourceConfig) -> str:
         "TRUNCATE",
         "CALL",
         "EXEC",
+        "INTO",
+        "OUTFILE",
+        "DUMPFILE",
+        "LOAD_FILE",
     ]
     for keyword in forbidden_keywords:
         if re.search(rf"\b{keyword}\b", upper_sql):
             raise SqlGuardError(f"禁止使用关键字：{keyword}")
 
-    return append_limit(normalized, datasource.max_rows)
+    return append_limit(normalized, datasource.max_rows, datasource.db_type)
 
 
-def append_limit(sql: str, max_rows: int) -> str:
+def append_limit(sql: str, max_rows: int, db_type: str = "dm") -> str:
     upper_sql = sql.upper()
     if re.search(r"\bLIMIT\s+\d+\b", upper_sql) or re.search(r"\bFETCH\s+FIRST\s+\d+\s+ROWS\b", upper_sql):
         return sql
+    if db_type == "mysql":
+        return f"{sql} LIMIT {max_rows}"
     return f"{sql} FETCH FIRST {max_rows} ROWS ONLY"
 
 
-def validate_table_name(table: str) -> str:
-    value = table.strip().upper()
-    if not re.fullmatch(r"[A-Z][A-Z0-9_]*", value):
-        raise SqlGuardError("表名只能包含大写字母、数字和下划线")
+def validate_table_name(table: str, db_type: str = "dm") -> str:
+    value = table.strip()
+    if db_type == "dm":
+        value = value.upper()
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", value):
+        raise SqlGuardError("表名只能包含字母、数字和下划线，且不能以数字开头")
     return value
 
 
@@ -84,15 +93,32 @@ def _match_table_rule(table: str, rule: str) -> bool:
     return fnmatchcase(table.upper(), rule.strip().upper())
 
 
-def validate_columns(columns: list[str]) -> list[str]:
+def validate_columns(columns: list[str], db_type: str = "dm") -> list[str]:
     if not columns:
         raise SqlGuardError("必须指定查询字段，禁止隐式 SELECT *")
     result: list[str] = []
     for column in columns:
-        value = column.strip().upper()
+        value = column.strip()
+        if db_type == "dm":
+            value = value.upper()
         if value == "*":
             raise SqlGuardError("禁止 SELECT *")
-        if not re.fullmatch(r"[A-Z][A-Z0-9_]*", value):
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", value):
             raise SqlGuardError(f"非法字段名：{column}")
         result.append(value)
     return result
+
+
+def _contains_schema_reference(sql: str, datasource: DataSourceConfig) -> bool:
+    if datasource.db_type == "mysql":
+        schema = re.escape(datasource.schema)
+        return bool(re.search(rf"(`{schema}`|{schema})\s*\.", sql, re.IGNORECASE))
+    schema = re.escape(datasource.schema.upper())
+    return bool(re.search(rf"\b{schema}\.", sql.upper()))
+
+
+def _contains_other_schema_table_reference(sql: str, datasource: DataSourceConfig) -> bool:
+    for schema in re.findall(r"\b(?:FROM|JOIN)\s+`?([A-Za-z_][A-Za-z0-9_]*)`?\s*\.", sql, re.IGNORECASE):
+        if schema.lower() != datasource.schema.lower():
+            return True
+    return False

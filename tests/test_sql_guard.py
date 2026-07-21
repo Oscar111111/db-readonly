@@ -23,6 +23,26 @@ def datasource() -> DataSourceConfig:
     )
 
 
+def mysql_datasource() -> DataSourceConfig:
+    return DataSourceConfig(
+        name="mysql-dev",
+        project="other-project",
+        env="dev",
+        description="mysql datasource",
+        driver="MySQL ODBC 8.0 Unicode Driver",
+        host="127.0.0.1",
+        port=3306,
+        schema="app_db",
+        username="readonly_user",
+        password_env="MYSQL_READONLY_PASSWORD",
+        max_rows=50,
+        query_timeout_seconds=10,
+        allow_tables=["*"],
+        deny_tables=[],
+        db_type="mysql",
+    )
+
+
 def test_guard_allows_schema_select_and_adds_limit():
     sql = ensure_safe_select("SELECT CID FROM MOM_INS.MOM_INVENTORY", datasource())
     assert sql.endswith("FETCH FIRST 100 ROWS ONLY")
@@ -72,3 +92,28 @@ def test_table_rules_deny_takes_priority():
     )
     with pytest.raises(SqlGuardError):
         ensure_table_allowed("MOM_SECRET_TOKEN", config)
+
+
+def test_mysql_guard_preserves_case_and_adds_limit():
+    sql = ensure_safe_select("SELECT id, order_no FROM app_db.orders", mysql_datasource())
+    assert sql == "SELECT id, order_no FROM app_db.orders LIMIT 50"
+
+
+def test_mysql_guard_allows_backtick_schema_reference():
+    sql = ensure_safe_select("SELECT id FROM `app_db`.`order`", mysql_datasource())
+    assert sql.endswith("LIMIT 50")
+
+
+def test_mysql_guard_rejects_other_database():
+    with pytest.raises(SqlGuardError):
+        ensure_safe_select("SELECT id FROM other_db.orders", mysql_datasource())
+
+
+def test_mysql_guard_rejects_join_to_other_database():
+    with pytest.raises(SqlGuardError):
+        ensure_safe_select("SELECT o.id FROM app_db.orders o JOIN other_db.users u ON o.user_id = u.id", mysql_datasource())
+
+
+def test_mysql_table_and_column_names_can_be_lowercase():
+    assert ensure_table_allowed("orders", mysql_datasource()) == "orders"
+    assert validate_columns(["id", "order_no"], "mysql") == ["id", "order_no"]

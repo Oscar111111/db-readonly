@@ -7,11 +7,14 @@ datasources:
   # 数据源名称。调用 MCP 工具时 datasource 参数填写这个值。
   # 建议名称包含环境、主机和 schema，避免不同环境同名 schema 冲突。
   dm-dev:
+    # 数据库类型。不填时默认 dm。
+    dbType: "dm"
+
     # 项目名称，用于多项目共存时区分来源。
     project: "your-project"
 
     # 环境名称，建议使用 dev / test / prod。
-    env: "test"
+    env: "dev"
 
     # 数据源描述。datasource_list 会返回这个描述，帮助大模型判断要查哪个环境。
     description: "Development Dameng database"
@@ -54,6 +57,29 @@ datasources:
     # - "SYS_*"
     # - "*_LOG"
     # - "*_SECRET"
+    denyTables: []
+
+  mysql-dev:
+    # MySQL 第一版支持 table_describe、table_query、sql_query。
+    # entity_* 工具暂不支持 MySQL 映射。
+    dbType: "mysql"
+    project: "your-project"
+    env: "dev"
+    description: "Development MySQL database"
+
+    # 先安装 MySQL Connector/ODBC，再执行 .\setup.ps1 -Drivers 查看真实驱动名。
+    # 下载地址：https://dev.mysql.com/downloads/connector/odbc/
+    driver: "MySQL ODBC 8.0 Unicode Driver"
+    host: "127.0.0.1"
+    port: 3306
+
+    # MySQL 下 schema 表示 database 名称。
+    schema: "your_database"
+    username: "readonly_user"
+    passwordEnv: "MYSQL_READONLY_PASSWORD"
+    maxRows: 100
+    queryTimeoutSeconds: 10
+    allowTables: ["*"]
     denyTables: []
 
 # entityType 到表名的例外映射。

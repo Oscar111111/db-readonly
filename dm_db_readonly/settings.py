@@ -29,6 +29,7 @@ class DataSourceConfig:
     query_timeout_seconds: int
     allow_tables: list[str]
     deny_tables: list[str]
+    db_type: str = "dm"
 
     @property
     def password(self) -> str:
@@ -62,6 +63,10 @@ def load_config(path: str | Path = "config.local.yaml") -> AppConfig:
 
     datasources: dict[str, DataSourceConfig] = {}
     for name, item in (raw.get("datasources") or {}).items():
+        db_type = str(item.get("dbType", "dm")).lower()
+        if db_type not in {"dm", "mysql"}:
+            raise ValueError(f"不支持的 dbType：{db_type}")
+        schema = str(item["schema"])
         datasources[name] = DataSourceConfig(
             name=name,
             project=str(item["project"]),
@@ -70,13 +75,14 @@ def load_config(path: str | Path = "config.local.yaml") -> AppConfig:
             driver=item["driver"],
             host=item["host"],
             port=int(item.get("port", 5236)),
-            schema=item["schema"].upper(),
+            schema=schema.upper() if db_type == "dm" else schema,
             username=item["username"],
             password_env=item["passwordEnv"],
             max_rows=int(item.get("maxRows", 100)),
             query_timeout_seconds=int(item.get("queryTimeoutSeconds", 10)),
-            allow_tables=[str(value).upper() for value in item.get("allowTables", ["*"])],
-            deny_tables=[str(value).upper() for value in item.get("denyTables", [])],
+            allow_tables=_normalize_table_rules(item.get("allowTables", ["*"]), db_type),
+            deny_tables=_normalize_table_rules(item.get("denyTables", []), db_type),
+            db_type=db_type,
         )
 
     return AppConfig(
@@ -97,3 +103,10 @@ def _read_windows_environment(name: str, scope: str) -> str | None:
             return str(value)
     except OSError:
         return None
+
+
+def _normalize_table_rules(values: list[object], db_type: str) -> list[str]:
+    rules = [str(value) for value in values]
+    if db_type == "dm":
+        return [rule.upper() for rule in rules]
+    return rules

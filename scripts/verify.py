@@ -31,6 +31,26 @@ def datasource() -> DataSourceConfig:
     )
 
 
+def mysql_datasource() -> DataSourceConfig:
+    return DataSourceConfig(
+        name="mysql-dev",
+        project="other-project",
+        env="dev",
+        description="mysql datasource",
+        driver="MySQL ODBC 8.0 Unicode Driver",
+        host="127.0.0.1",
+        port=3306,
+        schema="app_db",
+        username="readonly_user",
+        password_env="MYSQL_READONLY_PASSWORD",
+        max_rows=50,
+        query_timeout_seconds=10,
+        allow_tables=["*"],
+        deny_tables=[],
+        db_type="mysql",
+    )
+
+
 def assert_raises(error_type, func, *args):
     try:
         func(*args)
@@ -54,6 +74,12 @@ def main() -> None:
     assert_raises(SqlGuardError, validate_columns, ["*"])
 
     assert ensure_table_allowed("MOM_INVENTORY", ds) == "MOM_INVENTORY"
+    mysql_ds = mysql_datasource()
+    mysql_sql = ensure_safe_select("SELECT id, order_no FROM app_db.orders", mysql_ds)
+    assert mysql_sql == "SELECT id, order_no FROM app_db.orders LIMIT 50"
+    assert ensure_table_allowed("orders", mysql_ds) == "orders"
+    assert validate_columns(["id", "order_no"], "mysql") == ["id", "order_no"]
+
     denied_ds = DataSourceConfig(
         name="test",
         project="km-mom-next",

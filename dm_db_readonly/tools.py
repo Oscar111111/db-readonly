@@ -47,6 +47,7 @@ def datasource_list() -> list[dict[str, object]]:
 def entity_resolve(datasource: str, entityType: str) -> dict[str, object]:
     """Resolve an entityType to its inferred MOM table name."""
     ds = _datasource(datasource)
+    _ensure_entity_supported(ds)
     table = _entity_table(datasource, entityType)
     table_name = ensure_table_allowed(table, ds.config)
     return {
@@ -62,6 +63,7 @@ def entity_resolve(datasource: str, entityType: str) -> dict[str, object]:
 def entity_describe(datasource: str, entityType: str) -> list[dict[str, object]]:
     """Describe columns of the table inferred from an entityType."""
     ds = _datasource(datasource)
+    _ensure_entity_supported(ds)
     table = _entity_table(datasource, entityType)
     table_name = ensure_table_allowed(table, ds.config)
     return ds.describe_table(table_name)
@@ -71,6 +73,7 @@ def entity_describe(datasource: str, entityType: str) -> list[dict[str, object]]
 def entity_query(datasource: str, entityType: str, columns: list[str], where: str = "", limit: int = 100) -> list[dict[str, object]]:
     """Query rows by entityType using explicit columns and optional where clause."""
     ds = _datasource(datasource)
+    _ensure_entity_supported(ds)
     sql = build_entity_query_sql(ds, entityType, columns, where, limit, _config().entity_overrides)
     return ds.query(sql)
 
@@ -107,8 +110,9 @@ def build_entity_query_sql(
     limit: int = 100,
     entity_overrides: dict[str, str] | None = None,
 ) -> str:
+    _ensure_entity_supported(ds)
     table = ensure_table_allowed(entity_type_to_table(entityType, entity_overrides), ds.config)
-    selected_columns = validate_columns(columns)
+    selected_columns = validate_columns(columns, ds.config.db_type)
     row_limit = max(1, min(int(limit), ds.config.max_rows))
     sql = f"SELECT {', '.join(selected_columns)} FROM {ds.config.schema}.{table}"
     if where:
@@ -119,13 +123,25 @@ def build_entity_query_sql(
 
 def build_table_query_sql(ds: DataSource, table: str, columns: list[str], where: str = "", limit: int = 100) -> str:
     table_name = ensure_table_allowed(table, ds.config)
-    selected_columns = validate_columns(columns)
+    selected_columns = validate_columns(columns, ds.config.db_type)
     row_limit = max(1, min(int(limit), ds.config.max_rows))
-    sql = f"SELECT {', '.join(selected_columns)} FROM {ds.config.schema}.{table_name}"
+    if ds.config.db_type == "mysql":
+        sql = f"SELECT {', '.join(_quote_mysql_identifier(column) for column in selected_columns)} FROM {_quote_mysql_identifier(ds.config.schema)}.{_quote_mysql_identifier(table_name)}"
+    else:
+        sql = f"SELECT {', '.join(selected_columns)} FROM {ds.config.schema}.{table_name}"
     if where:
         sql += f" WHERE {where}"
-    sql += f" FETCH FIRST {row_limit} ROWS ONLY"
+    sql += f" LIMIT {row_limit}" if ds.config.db_type == "mysql" else f" FETCH FIRST {row_limit} ROWS ONLY"
     return ensure_safe_select(sql, ds.config)
+
+
+def _ensure_entity_supported(ds: DataSource) -> None:
+    if ds.config.db_type == "mysql":
+        raise ValueError("MySQL datasource 暂不支持 entity 映射，请使用 table_describe/table_query/sql_query")
+
+
+def _quote_mysql_identifier(identifier: str) -> str:
+    return f"`{identifier}`"
 
 
 def main() -> None:

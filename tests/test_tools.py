@@ -14,6 +14,8 @@ class DummyDataSource:
                 "max_rows": max_rows,
                 "allow_tables": ["*"],
                 "deny_tables": [],
+                "mapping_dir": None,
+                "project": "test-project",
             },
         )()
         self.queries: list[str] = []

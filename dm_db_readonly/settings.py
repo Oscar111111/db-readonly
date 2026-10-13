@@ -30,6 +30,7 @@ class DataSourceConfig:
     allow_tables: list[str]
     deny_tables: list[str]
     db_type: str = "dm"
+    mapping_dir: Path | None = None
 
     @property
     def password(self) -> str:
@@ -67,6 +68,9 @@ def load_config(path: str | Path = "config.local.yaml") -> AppConfig:
         if db_type not in {"dm", "mysql"}:
             raise ValueError(f"不支持的 dbType：{db_type}")
         schema = str(item["schema"])
+        mapping_dir = item.get("mappingDir")
+        if mapping_dir is not None and not isinstance(mapping_dir, str):
+            raise ValueError(f"datasource {name} 的 mappingDir 必须是目录路径字符串")
         datasources[name] = DataSourceConfig(
             name=name,
             project=str(item["project"]),
@@ -83,6 +87,7 @@ def load_config(path: str | Path = "config.local.yaml") -> AppConfig:
             allow_tables=_normalize_table_rules(item.get("allowTables", ["*"]), db_type),
             deny_tables=_normalize_table_rules(item.get("denyTables", []), db_type),
             db_type=db_type,
+            mapping_dir=(config_path.parent / mapping_dir).resolve() if mapping_dir else None,
         )
 
     return AppConfig(

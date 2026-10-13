@@ -1,5 +1,6 @@
 from pathlib import Path
 import sys
+import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 if hasattr(sys.stdout, "reconfigure"):
@@ -98,6 +99,11 @@ def main() -> None:
     )
     assert_raises(SqlGuardError, ensure_table_allowed, "MOM_SECRET_TOKEN", denied_ds)
 
+    mapping_tests = unittest.defaultTestLoader.discover(
+        str(Path(__file__).resolve().parents[1] / "tests"), pattern="test_model_mapping.py"
+    )
+    if not unittest.TextTestRunner().run(mapping_tests).wasSuccessful():
+        raise SystemExit(1)
     print("verify passed")
 
 

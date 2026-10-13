@@ -19,6 +19,11 @@ datasources:
     # 数据源描述。datasource_list 会返回这个描述，帮助大模型判断要查哪个环境。
     description: "Development Dameng database"
 
+    # 可选：此 datasource 的低代码模型包目录，相对当前 YAML 文件解析。
+    # 每个目录只放一个对应项目、环境版本的 ZIP；不配置或无 ZIP 时使用原有推导规则。
+    # 有包时以 models/*.dm.json 映射为准；更新包后重启 MCP。不要提交实际模型包。
+    # mappingDir: "mapping_packages/your-project"
+
     # Windows 已安装的 ODBC 驱动名称。
     # 不确定名称时，执行 .\setup.ps1 -Drivers 查看本机可用 ODBC 驱动列表。
     # 达梦常见名称示例："DM8 ODBC DRIVER"。
@@ -86,7 +91,8 @@ datasources:
 # 默认推导规则：
 #   Inventory -> MOM_INVENTORY
 #   InventoryBatchAttribute -> MOM_INVENTORY_BATCH_ATTRIBUTE
-# 只有当某个 entityType 不符合默认规则时，才需要在这里配置。
+# 仅在没有模型包时使用；有包时优先采用包内映射。
+# 此处是兼容旧配置的全局规则，不适合不同 datasource 的差异映射。
 # 示例：
 #   SomeSpecialEntity: MOM_CUSTOM_TABLE
 entityOverrides: {}
